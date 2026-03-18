@@ -1,159 +1,284 @@
 %% -------------------------------------------------
 % 1. SETUP
 %% -------------------------------------------------
-% deletes all varaibles currently stored in MATLAB's workpsace
+
 clear
-% clears the command window text
 clc
 
 %% -------------------------------------------------
-% 2. LOAD AUDIO
+% 2. DEFINE FILE LOCATIONS
 %% -------------------------------------------------
 
-% Creates a MIR audio object x
+audioFolder = '/Users/avasklar/Library/CloudStorage/GoogleDrive-ars038@bucknell.edu/.shortcut-targets-by-id/1kOmUoLaENso5UXKur4b56iUdn1RoNMMt/Videos/Converted_files';
+lookingFolder = '/Users/avasklar/Library/CloudStorage/GoogleDrive-ars038@bucknell.edu/My Drive/Fellowship/LookingData';
 
-x=miraudio('/Users/avasklar/Documents/MATLAB/ZooMus_100_Performance.wav');
-
-% Extract baby ID from filename
-filename = 'ZooMus_116_step5_looking_data.csv';
-
-tokens = regexp(filename, 'ZooMus_(\d+)_', 'tokens');
-babyID = str2double(tokens{1}{1});
-
-looking=readmatrix(filename);
-
-% Check sampling rate: How many samples per second
-sr = get(x,'Sampling');
-% extract the numeric value from the cell
-sr = sr{1};
-sr
-
+audioFiles = dir(fullfile(audioFolder,'*.wav'));
 
 %% -------------------------------------------------
-% 3. FRAME AUDIO
-%% -------------------------------------------------
-% Divides the continuous waveform into overlapping chunks.
-% Each frame spans 50 ms
-% Each next frame starts 25 ms later
-xf = mirframe(x,'Length',.5,'Hop',.5);
-
-
-%% -------------------------------------------------
-% 4. EXTRACT FEATURES (PER FRAME)
+% BABY → VIDEO MAPPING
 %% -------------------------------------------------
 
-% ---- RMS (Loudness) ----
-% Compute RMS for each frame
-l = mirrms(xf); 
-% Extract numeric RMS values
-rmsVals = mirgetdata(l);
+map = [
+116 115
+115 115
+117 117
+118 118
+119 118
+120 120
+121 120
+122 122
+123 122
+125 125
+126 125
+127 127
+128 127
+129 129
+130 129
+132 132
+134 132
+133 133
+135 133
+136 136
+137 136
+138 138
+139 138
+140 140
+141 140
+142 142
+143 142
+144 144
+145 144
+146 146
+147 146
+148 148
+149 148
 
-% ---- Brightness (Spectral Centroid) ----
-b = mircentroid(xf);
-brightVals = mirgetdata(b);
-
-% ---- Roughness ----
-r = mirroughness(xf);
-roughVals = mirgetdata(r);
-
-% ---- Spectral Flux ----
-spec = mirspectrum(xf);
-f = mirflux(spec);
-fluxVals = mirgetdata(f);
-fluxVals = fluxVals(:);   % force column vector
-fluxVals = [0; fluxVals];
-
-% ---- Pitch ----
-p = mirpitch(x,'Frame',0.5,0.5);
-pitchVals = mirgetdata(p);
-pitchVals = pitchVals(1,:);
-
-
+150 150
+151 151
+152 151
+153 153
+154 153
+155 155
+156 155
+157 157
+158 157
+159 159
+160 159
+161 161
+162 162
+163 162
+164 164
+166 166
+182 166
+167 166
+168 168
+169 168
+170 170
+171 170
+172 172
+173 172
+174 174
+176 174
+183 174
+177 177
+179 177
+180 180
+184 180
+185 185
+186 185
+];
 
 %% -------------------------------------------------
-% 6. BUILD TIME VECTOR
+% RESULTS TABLE
 %% -------------------------------------------------
 
-numFrames = length(rmsVals);
-times = (0:numFrames-1) * 0.5;
-times = times(:);   % make it a column
-
-
+results = table;
 
 %% -------------------------------------------------
-% 7. PREPARE TABLE FOR EXPORT
+% PROCESS EACH AUDIO FILE
 %% -------------------------------------------------
 
+videoIDs = unique(map(:,2));
 
-% Convert everything to column vectors
-times   = times(:);
-rmsVals    = rmsVals(:);
-brightVals = brightVals(:);
-roughVals  = roughVals(:);
-fluxVals   = fluxVals(:);
-pitchVals  = pitchVals(:);
-looking_binary=looking(:,3); %looks at 
+for v = 1:length(videoIDs)
 
-% adjust lengths 
-min_len = min([length(times), ...
+    videoID = videoIDs(v);
+
+    files = dir(fullfile(audioFolder, sprintf('*%d*.wav', videoID)));
+
+    if isempty(files)
+        disp(['Audio not found for video ' num2str(videoID)])
+        continue
+    end
+
+    audioName = files(1).name;
+    audioPath = fullfile(audioFolder, audioName);
+
+    
+
+    disp(['Processing video: ' audioName])
+
+    x = miraudio(audioPath);
+
+    rows = map(map(:,2) == videoID,:);
+    babyIDs = rows(:,1);
+    %% -------------------------------------------------
+    % FRAME AUDIO
+    %% -------------------------------------------------
+
+    xf = mirframe(x,'Length',0.5,'Hop',0.5);
+
+    %% -------------------------------------------------
+    % EXTRACT FEATURES
+    %% -------------------------------------------------
+
+    % RMS
+    l = mirrms(xf);
+    rmsVals = mirgetdata(l);
+
+    % Brightness
+    b = mircentroid(xf);
+    brightVals = mirgetdata(b);
+
+    % Roughness
+    r = mirroughness(xf);
+    roughVals = mirgetdata(r);
+
+    % Flux (optimized)
+    f = mirflux(xf);
+    fluxVals = mirgetdata(f);
+    fluxVals = fluxVals(:);
+    fluxVals = [0; fluxVals];
+
+    % Pitch
+    p = mirpitch(x,'Frame',0.5,0.5);
+    pitchVals = mirgetdata(p);
+    pitchVals = pitchVals(1,:);
+
+    % Tempo
+    t = mirtempo(x);
+    tempoVals = mirgetdata(t);
+    tempoVals = tempoVals(:);
+
+    %% -------------------------------------------------
+    % TIME VECTOR
+    %% -------------------------------------------------
+
+    numFrames = length(rmsVals);
+    times = (0:numFrames-1)*0.5;
+    times = times(:);
+
+    %% -------------------------------------------------
+    % PROCESS EACH BABY
+    %% -------------------------------------------------
+
+    for k = 1:length(babyIDs)
+
+        babyID = babyIDs(k);
+
+        disp(['   Baby: ' num2str(babyID)])
+
+        %% LOAD LOOKING ONSET/OFFSET DATA
+
+        fname = sprintf('ZooMus_%d.csv',babyID);
+        filepath = fullfile(lookingFolder,fname);
+
+        data = readtable(filepath);
+
+        
+
+        min_len = min([length(times), ...
                length(rmsVals), ...
                length(brightVals), ...
                length(roughVals), ...
                length(fluxVals), ...
-               length(pitchVals), ...
-               length(looking_binary)]);
+               length(pitchVals)]);
 
-%trim everything 
-times = times(1:min_len);
-rmsVals= rmsVals(1:min_len);
-brightVals= brightVals(1:min_len);
-roughVals = roughVals(1:min_len);
-fluxVals = fluxVals(1:min_len);
-pitchVals= pitchVals(1:min_len);
-looking_binary= looking_binary(1:min_len);
+        rmsVals2 = rmsVals(1:min_len);
+        brightVals2 = brightVals(1:min_len);
+        roughVals2 = roughVals(1:min_len);
+        fluxVals2 = fluxVals(1:min_len);
+        pitchVals2 = pitchVals(1:min_len);
+        
 
-% ------------------------------
-% 5-second pre-look averages
-% ------------------------------
+        rmsVals2 = rmsVals2(:);
+        brightVals2 = brightVals2(:);
+        roughVals2 = roughVals2(:);
+        fluxVals2 = fluxVals2(:);
+        pitchVals2 = pitchVals2(:);
+        
 
-window_size = 10;   % 10 frames = 5 seconds
+        
 
-look_events = find(looking_binary == 1);
+        %% -------------------------------------------------
+        % PRE-LOOK WINDOWS (SIMPLE VERSION)
+        %% -------------------------------------------------
+        
+        window_size = 10;
+        
+        onset_frames = round(data.Onset_ms / 500) + 1;
+        onset_frames = onset_frames(onset_frames > 1);
+        
+        disp('Number of onset events:')
+        disp(length(onset_frames))
+        disp('Onset frames:')
+        disp(onset_frames)
+        
+        avg_rms = [];
+        avg_bright = [];
+        avg_rough = [];
+        avg_flux = [];
+        avg_pitch = [];
+        avg_tempo = [];
+        
+        for i = 1:length(onset_frames)
+        
+            frame = onset_frames(i);
+            disp(frame)
+            disp(min_len)
+            
+        
+            if frame > 1 && frame <= min_len
+        
+                start_idx = max(1, frame - window_size);
+                window = start_idx : frame - 1;
+        
+                avg_rms(end+1)     = mean(rmsVals2(window), 'omitnan');
+                avg_bright(end+1)  = mean(brightVals2(window), 'omitnan');
+                avg_rough(end+1)   = mean(roughVals2(window), 'omitnan');
+                avg_flux(end+1)    = mean(fluxVals2(window), 'omitnan');
+                avg_pitch(end+1)   = mean(pitchVals2(window), 'omitnan');
+                avg_tempo(end+1) = tempoVals(1);
+        
+            end
+        end
+        %% OVERALL AVERAGES
 
-avg_rms = [];
-avg_bright = [];
-avg_rough = [];
-avg_flux = [];
-avg_pitch = [];
+        overall_rms = mean(avg_rms, 'omitnan');
+        overall_bright = mean(avg_bright, 'omitnan');
+        overall_rough = mean(avg_rough, 'omitnan');
+        overall_flux = mean(avg_flux, 'omitnan');
+        overall_pitch = mean(avg_pitch, 'omitnan');
+        overall_tempo = mean(avg_tempo, 'omitnan');
 
-for i = 1:length(look_events)
+        %% STORE RESULT
 
-    idx = look_events(i);
+        eventTable = table(videoID, babyID, overall_rms, overall_bright, ...
+                           overall_rough, overall_flux, overall_pitch, ...
+                           overall_tempo, ...
+                           'VariableNames', ...
+                           {'Video','Baby','RMS','Brightness','Roughness','Flux','Pitch','Tempo'});
 
-    if idx > window_size   % make sure enough previous frames exist
-        window = (idx - window_size):(idx - 1);
+        results = [results; eventTable];
 
-        avg_rms(end+1)    = mean(rmsVals(window));
-        avg_bright(end+1) = mean(brightVals(window));
-        avg_rough(end+1)  = mean(roughVals(window));
-        avg_flux(end+1)   = mean(fluxVals(window));
-        avg_pitch(end+1) = mean(pitchVals(window), 'omitnan'); %ignore silence
     end
+
+    clear x xf l b r f p t
+
 end
 
-%average total values
-overall_rms    = mean(avg_rms);
-overall_bright = mean(avg_bright);
-overall_rough  = mean(avg_rough);
-overall_flux   = mean(avg_flux);
-overall_pitch = mean(avg_pitch, 'omitnan'); %ignore silence
+%% -------------------------------------------------
+% EXPORT FINAL DATASET
+%% -------------------------------------------------
 
-
-
-eventTable = table(babyID, overall_rms, overall_bright, ...
-                   overall_rough, overall_flux, overall_pitch, ...
-                   'VariableNames', ...
-                   {'Baby','RMS','Brightness','Roughness','Flux','Pitch'});
-
-% Export CSV
-writetable(eventTable,'ZooMus_116_look_avgs.csv');
+writetable(results,'ZooMus_ALL_look_avgs.csv')
